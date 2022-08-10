@@ -55,6 +55,7 @@ func (s *Server) Start() {
 						fmt.Println("revc buf err", err)
 						continue
 					}
+					fmt.Printf("server call back : %s,cnt = %d\n", string(buf), cnt)
 					// 回显功能
 					if _, err2 := conn.Write(buf[:cnt]); err2 != nil {
 						fmt.Println("write back buf err", err)
