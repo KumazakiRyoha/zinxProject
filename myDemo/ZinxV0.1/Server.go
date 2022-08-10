@@ -3,7 +3,7 @@ package main
 import "github.com/KumazakiRyoha/zinxProject/znet"
 
 /**
-基于Zinx框架来开发的服务器端2应用程序
+基于Zinx框架来开发的服务器端应用程序
 */
 
 func main() {
