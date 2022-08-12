@@ -1,6 +1,7 @@
 package znet
 
 import (
+	"errors"
 	"fmt"
 	"github.com/KumazakiRyoha/zinxProject/ziface"
 	"net"
@@ -14,11 +15,11 @@ type Connection struct {
 	ConnID uint32
 	// 当前的链接状态
 	isClosed bool
-	// 当前链接所绑定的业务处理方法API
-	handleAPI ziface.HandleFunc
 
 	// 告知当前链接已经退出 channel
 	ExitChan chan bool
+	//该链接处理的方法Router
+	Router ziface.IRouter
 }
 
 func (c *Connection) Start() {
@@ -36,16 +37,23 @@ func (c *Connection) StartReader() {
 	for {
 		// 读取客户端的数据到buf中，最大字节512
 		buf := make([]byte, 512)
-		cnt, err := c.Conn.Read(buf)
+		_, err := c.Conn.Read(buf)
 		if err != nil {
 			fmt.Println("recv buf err", err)
 			break
 		}
-		// 调用当前链接绑定的HandleAPI
-		if err = c.handleAPI(c.Conn, buf, cnt); err != nil {
-			fmt.Println("ConnID", c.ConnID, " handle is error", err)
-			break
+
+		// 从当前conn数据的Request请求数据
+		req := Request{
+			conn: c,
+			data: buf,
 		}
+		// 从路由中，找到注册绑定的conn对应的router
+		go func(request ziface.IRequest) {
+			c.Router.PreHandle(request)
+			c.Router.Handle(request)
+			c.Router.PostHandle(request)
+		}(&req)
 	}
 }
 
@@ -76,13 +84,17 @@ func (c *Connection) RemoteAddr() net.Addr {
 	return c.Conn.RemoteAddr()
 }
 
+func (c *Connection) Send(data []byte) error {
+	return errors.New("")
+}
+
 // 初始化链接模块的方法
-func NewConnection(conn *net.TCPConn, connID uint32, callback_api ziface.HandleFunc) *Connection {
+func NewConnection(conn *net.TCPConn, connID uint32, router ziface.IRouter) *Connection {
 	return &Connection{
-		Conn:      conn,
-		ConnID:    connID,
-		handleAPI: callback_api,
-		isClosed:  false,
-		ExitChan:  make(chan bool, 1),
+		Conn:     conn,
+		ConnID:   connID,
+		Router:   router,
+		isClosed: false,
+		ExitChan: make(chan bool, 1),
 	}
 }
