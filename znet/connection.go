@@ -3,8 +3,8 @@ package znet
 import (
 	"errors"
 	"fmt"
-	"github.com/KumazakiRyoha/zinxProject/utils"
 	"github.com/KumazakiRyoha/zinxProject/ziface"
+	"io"
 	"net"
 )
 
@@ -36,18 +36,36 @@ func (c *Connection) StartReader() {
 	defer c.Stop()
 
 	for {
-		// 读取客户端的数据到buf中，最大字节512
-		buf := make([]byte, utils.GlobleObj.MaxPackageSize)
-		_, err := c.Conn.Read(buf)
+
+		// 从当前conn数据的Request请求数据
+		dp := NewDataPack()
+		// 读取客户端的Msg Head 二进制流 8字节
+		headData := make([]byte, dp.GetHeadLen())
+		if _, err := io.ReadFull(c.GetTCPConnection(), headData); err != nil {
+			fmt.Println("read msg head error", err)
+			break
+		}
+		// 拆包，得到msgId和msgDataLen放在msg消息中
+		msg, err := dp.Unpack(headData)
 		if err != nil {
-			fmt.Println("recv buf err", err)
+			fmt.Println("unpack error", err)
 			break
 		}
 
-		// 从当前conn数据的Request请求数据
+		//根据dataLen，再次读取Data，放在msgData中
+		var data []byte
+		if msg.GetMsgLen() > 0 {
+			data = make([]byte, msg.GetMsgLen())
+			if _, err := io.ReadFull(c.GetTCPConnection(), data); err != nil {
+				fmt.Println("read msg data error", err)
+				break
+			}
+		}
+		msg.SetData(data)
+
 		req := Request{
 			conn: c,
-			data: buf,
+			msg:  msg,
 		}
 		// 从路由中，找到注册绑定的conn对应的router
 		go func(request ziface.IRequest) {
@@ -85,8 +103,25 @@ func (c *Connection) RemoteAddr() net.Addr {
 	return c.Conn.RemoteAddr()
 }
 
-func (c *Connection) Send(data []byte) error {
-	return errors.New("")
+// 提供一个SendMsg方法，将我们需要发送给客户端的数据，先进行封包，再发送
+func (c *Connection) SendMsg(msgId uint32, data []byte) error {
+	if c.isClosed {
+		return errors.New("Connection closed when send msg")
+	}
+
+	// 将data进行封包
+	dp := NewDataPack()
+	binaryMsg, err := dp.Pack(NewMsgPackage(msgId, data))
+	if err != nil {
+		fmt.Println("Pack error msg id=", msgId)
+		return errors.New("Pack error msg")
+	}
+	// 将数据发给客户端
+	if _, err := c.Conn.Write(binaryMsg); err != nil {
+		fmt.Println("Write msg id", msgId, " error:", err)
+		return errors.New("conn Write error")
+	}
+	return nil
 }
 
 // 初始化链接模块的方法
