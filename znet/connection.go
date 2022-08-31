@@ -19,8 +19,11 @@ type Connection struct {
 
 	// 告知当前链接已经退出 channel
 	ExitChan chan bool
-	//该链接处理的方法Router
-	Router ziface.IRouter
+
+	// 无缓冲管道，用于读写Goroutine之间的消息通信
+	msgChan chan []byte
+	// 当前server的消息管理模块，用来绑定MsgID和对应的处理业务API关系
+	MsgHandler ziface.IMsgHandler
 }
 
 func (c *Connection) Start() {
@@ -28,10 +31,11 @@ func (c *Connection) Start() {
 	//TODO 启动从当前链接的读业务
 	go c.StartReader()
 	//TODO 启动从当前链接的写业务
+	go c.StartWrite()
 }
 
 func (c *Connection) StartReader() {
-	fmt.Println("Reader Goroutine is running...")
+	fmt.Println("[Reader Goroutine is running]")
 	defer fmt.Println("connID = ", c.ConnID, " Reader is exit,remote addr is ", c.RemoteAddr().String())
 	defer c.Stop()
 
@@ -68,11 +72,27 @@ func (c *Connection) StartReader() {
 			msg:  msg,
 		}
 		// 从路由中，找到注册绑定的conn对应的router
-		go func(request ziface.IRequest) {
-			c.Router.PreHandle(request)
-			c.Router.Handle(request)
-			c.Router.PostHandle(request)
-		}(&req)
+		go c.MsgHandler.DoMsgHandler(&req)
+	}
+}
+
+// 写消息Goroutine，专门给客户端写消息
+func (c *Connection) StartWrite() {
+	fmt.Println("[Writer Goroutine is running]")
+	defer fmt.Println(c.RemoteAddr().String(), " [conn Writer exit!]")
+
+	// 不断地阻塞等待channel的消息，进行写给客户端
+	for {
+		select {
+		case data := <-c.msgChan:
+			// 有数据要写给客户端
+			if _, err := c.Conn.Write(data); err != nil {
+				fmt.Println("Sending data false,", err)
+				return
+			}
+		case <-c.ExitChan: // 没有阻塞，代表有数据可读
+			return
+		}
 	}
 }
 
@@ -86,8 +106,12 @@ func (c *Connection) Stop() {
 	c.isClosed = true
 	// 关闭socket链接
 	c.Conn.Close()
+
+	// 告知writer管道已经关闭
+	c.ExitChan <- true
 	// 回收资源
 	close(c.ExitChan)
+	close(c.msgChan)
 
 }
 
@@ -116,21 +140,19 @@ func (c *Connection) SendMsg(msgId uint32, data []byte) error {
 		fmt.Println("Pack error msg id=", msgId)
 		return errors.New("Pack error msg")
 	}
-	// 将数据发给客户端
-	if _, err := c.Conn.Write(binaryMsg); err != nil {
-		fmt.Println("Write msg id", msgId, " error:", err)
-		return errors.New("conn Write error")
-	}
+	// 将数据放入管道中
+	c.msgChan <- binaryMsg
 	return nil
 }
 
 // 初始化链接模块的方法
-func NewConnection(conn *net.TCPConn, connID uint32, router ziface.IRouter) *Connection {
+func NewConnection(conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
 	return &Connection{
-		Conn:     conn,
-		ConnID:   connID,
-		Router:   router,
-		isClosed: false,
-		ExitChan: make(chan bool, 1),
+		Conn:       conn,
+		ConnID:     connID,
+		MsgHandler: msgHandler,
+		isClosed:   false,
+		ExitChan:   make(chan bool, 1),
+		msgChan:    make(chan []byte),
 	}
 }

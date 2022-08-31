@@ -37,4 +37,7 @@ func (m *MsgHandle) AddRouter(msgId uint32, router ziface.IRouter) {
 	if _, ok := m.Apis[msgId]; ok {
 		panic("repeat api,msgId = " + strconv.Itoa(int(msgId)))
 	}
+	// 添加msg与api的绑定关系
+	m.Apis[msgId] = router
+	fmt.Print("Add api msgId = ", msgId)
 }

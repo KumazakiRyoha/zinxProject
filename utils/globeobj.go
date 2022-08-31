@@ -46,7 +46,7 @@ func (g *GlobeObj) Reload() {
 func init() {
 	GlobleObj = &GlobeObj{
 		Name:           "ZinxServerApp",
-		Version:        "V0.4",
+		Version:        "V0.7",
 		TcpPort:        8999,
 		Host:           "0.0.0.0", // 代表全部IP
 		MaxConn:        1000,
