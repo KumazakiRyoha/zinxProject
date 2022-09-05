@@ -48,3 +48,27 @@ func (m *MsgHandle) AddRouter(msgId uint32, router ziface.IRouter) {
 	m.Apis[msgId] = router
 	fmt.Print("Add api msgId = ", msgId)
 }
+
+//启动一个worker工作池
+func (m *MsgHandle) StartWorkerPool() {
+	// 根据workerPoolSize分别开启Worker，每个Worker用一个go来承载
+	for i := 0; i < int(m.WorkPoolSize); i++ {
+		// 1 当前的worker对应的channel消息队列开辟弓箭，第0个worker就用第0个channel
+		m.TaskQueue[i] = make(chan ziface.IRequest, utils.GlobleObj.MaxWorkerTaskLen)
+		// 2 启动当前的worker，阻塞等待消息从channel传递进来
+		go m.StartOneWorker(i, m.TaskQueue[i])
+	}
+}
+
+// 启动一个Worker工作流程
+func (m *MsgHandle) StartOneWorker(workerId int, taskQueue chan ziface.IRequest) {
+	fmt.Println("Worker ID= ", workerId, " is started...")
+	// 不断的阻塞等待对应消息队列的消息
+	for {
+		select {
+		// 如果有消息过来，出列的就是一个客户端的request，执行当前request所绑定的方法
+		case request := <-taskQueue:
+			m.DoMsgHandler(request)
+		}
+	}
+}
