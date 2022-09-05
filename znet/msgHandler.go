@@ -2,6 +2,7 @@ package znet
 
 import (
 	"fmt"
+	"github.com/KumazakiRyoha/zinxProject/utils"
 	"github.com/KumazakiRyoha/zinxProject/ziface"
 	"strconv"
 )
@@ -13,11 +14,17 @@ import (
 type MsgHandle struct {
 	// 存放每个MsgID所对应的处理方法
 	Apis map[uint32]ziface.IRouter
+	// 负责Worker取任务的消息队列
+	TaskQueue []chan ziface.IRequest
+	// 业务工作Worker池数量
+	WorkPoolSize uint32
 }
 
 func NewMsgHandle() *MsgHandle {
 	return &MsgHandle{
-		Apis: make(map[uint32]ziface.IRouter),
+		Apis:         make(map[uint32]ziface.IRouter),
+		WorkPoolSize: utils.GlobleObj.WorkerPoolSize, //从全局配置中获取
+		TaskQueue:    make([]chan ziface.IRequest, utils.GlobleObj.WorkerPoolSize),
 	}
 }
 
