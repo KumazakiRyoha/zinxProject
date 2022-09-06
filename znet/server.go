@@ -34,6 +34,9 @@ func (s *Server) Start() {
 		utils.GlobleObj.Host, utils.GlobleObj.TcpPort)
 
 	go func() {
+
+		s.MsgHandler.StartWorkerPool()
+
 		// 1. 获取一个TCP的Addr
 		addr, err := net.ResolveTCPAddr(s.IPServer, fmt.Sprintf("%s:%d", s.IP, s.Port))
 		if err != nil {
