@@ -17,8 +17,7 @@ type PingRouter struct {
 func (p *PingRouter) Handle(request ziface.IRequest) {
 	fmt.Println("Call Router Handle...")
 	// 先读取客户端的数据，再回写
-	fmt.Println("recv from client msgId = ", request.GetMsgId(),
-		", Data = ", string(request.GetData()))
+	fmt.Println("recv from client msgId = ", request.GetMsgId(), ", Data = ", string(request.GetData()))
 	err := request.GetConnection().SendMsg(200, []byte("ping...ping...ping"))
 	if err != nil {
 		fmt.Println(err)
@@ -40,11 +39,27 @@ func (p *HelloZinxRouter) Handle(request ziface.IRequest) {
 	}
 }
 
+func DoConnectionBegin(conn ziface.IConnection) {
+	fmt.Println("====>DoConnnection is Called...")
+	if err := conn.SendMsg(202, []byte("DoConnection Begin")); err != nil {
+		fmt.Println(err)
+	}
+}
+
+func DoConnectionLost(conn ziface.IConnection) {
+	fmt.Println("====>DoConnection is Called...")
+	fmt.Println("conn id = ", conn.GetConnID(), " is Lost...")
+}
+
 func main() {
 	// 创建Server实例，使用Zinx的api
 	server := znet.NewServer()
 	server.AddRouter(0, &PingRouter{})
 	server.AddRouter(1, &HelloZinxRouter{})
+
+	// 注册钩子函数
+	server.SetOnConnStart(DoConnectionBegin)
+	server.SetOnConnStop(DoConnectionLost)
 	// 启动server
 	server.Serve()
 }
