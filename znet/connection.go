@@ -7,6 +7,7 @@ import (
 	"github.com/KumazakiRyoha/zinxProject/ziface"
 	"io"
 	"net"
+	"sync"
 )
 
 type Connection struct {
@@ -27,6 +28,10 @@ type Connection struct {
 	msgChan chan []byte
 	// 当前server的消息管理模块，用来绑定MsgID和对应的处理业务API关系
 	MsgHandler ziface.IMsgHandler
+	// 连接属性集合
+	property map[string]interface{}
+	// 保护连接树形的锁
+	propertyLock sync.RWMutex
 }
 
 func (c *Connection) Start() {
@@ -165,6 +170,33 @@ func (c *Connection) SendMsg(msgId uint32, data []byte) error {
 	return nil
 }
 
+func (c *Connection) SetProperty(key string, value interface{}) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	//添加一个连接树形
+	c.property[key] = value
+}
+
+func (c *Connection) GetProperty(key string) (interface{}, error) {
+	c.propertyLock.RLock()
+	defer c.propertyLock.RUnlock()
+
+	if value, ok := c.property[key]; ok {
+		return value, nil
+	} else {
+		return nil, errors.New("no property found")
+	}
+}
+
+func (c *Connection) RemoveProperty(key string) {
+	c.propertyLock.Lock()
+	defer c.propertyLock.Unlock()
+
+	// 删除属性
+	delete(c.property, key)
+}
+
 // 初始化链接模块的方法
 func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgHandler ziface.IMsgHandler) *Connection {
 	c := &Connection{
@@ -175,6 +207,7 @@ func NewConnection(server ziface.IServer, conn *net.TCPConn, connID uint32, msgH
 		isClosed:   false,
 		ExitChan:   make(chan bool, 1),
 		msgChan:    make(chan []byte),
+		property:   make(map[string]interface{}),
 	}
 	// 将conn加入到ConnManager中
 	c.TcpServer.GetConnMgr().Add(c)
